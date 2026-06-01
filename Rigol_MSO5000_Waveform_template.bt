@@ -1,0 +1,121 @@
+//------------------------------------------------
+//--- 010 Editor v15.0.2 Binary Template
+//
+//      File: Rigol_MSO5000_Waveform_template.bt
+//   Authors: solderer
+//   Version: 1.0
+//   Purpose: The script checks buggy headers and fixes them; it allows viewing dump data as a struct with human-readable values
+//  Category: Electronics
+// File Mask: .bin
+//  ID Bytes: 52 47 30 31 / RG01
+//   History: 
+//------------------------------------------------
+LittleEndian();
+
+typedef struct {
+uint unkn3C;
+uint unkn40;
+char date[16];
+char time[16];
+char model[7];
+char semicolon <hidden=true>;
+char serial[13];
+byte padding79[3];
+char unkn7C[16];
+char padding8C[8] <format=hex>;
+uint unkn94;
+uint unkn98;
+ushort unkn9C;
+ushort unkn9E;
+} additionalInfo_t;
+
+typedef uint dumpSize_t <read=dumpSize_t_read>;
+string dumpSize_t_read(dumpSize_t &r)
+{
+    local int size = ReadUInt(startof(r));
+    local string ret;
+    if(size > FileSize())
+    {
+        Printf("Buggy dump detected!\n");
+            
+        local char blockCount = ReadUInt(startof(r) + 4);
+        local int i;
+        local int64 blockStart = startof(r) + 8; // first block offset
+        local int type;
+        local int samples;
+        local int bytes;
+        local float samplingTime;
+        local double samplingPeriod;
+        for( i = 0; i < blockCount; i++ )
+        {
+            type = ReadUInt(blockStart + 4);
+            bytes = ReadUInt(blockStart + 148);
+            if(type == 6)
+            {
+                samples = ReadUInt(blockStart + 12)/8;
+                samplingPeriod = ReadDouble(blockStart + 32);
+                bytes = bytes/8;
+                WriteUInt(blockStart + 12, samples);
+                WriteFloat(blockStart + 20, samplingPeriod*samples);
+                WriteUInt(blockStart + 148, bytes);
+                Printf("    Header in block %d corrected.\n", i);
+            }
+            blockStart = blockStart + bytes + 152;
+        }
+        size = FileSize() - (blockCount - 1)*152;
+        WriteUInt(startof(r), size);
+        Printf("    Dump header corrected.\n");
+    }
+        
+    SPrintf( ret, "%Ld", size );
+//    Printf("real size: %s\n", ret);
+    return ret;
+};
+
+typedef float LASAMPLE <read=LASAMPLERead, write=LASAMPLEWrite>;
+ 
+string LASAMPLERead( LASAMPLE f )
+{
+    string s;
+    SPrintf( s, "%X", f );
+    return s;
+}
+
+void LASAMPLEWrite( LASAMPLE &f, string s )
+{
+    if(RegExMatch(s, "\\h{2}") < 1)
+    {
+        Printf("%s not allowed\n", s);
+        return;
+    }
+    local int buf;
+    SScanf( s, "%X", buf );
+    f = (LASAMPLE)(buf);
+}  
+
+typedef struct {
+    uint unknC;
+    uint type <comment="suppose 1 for analog, 6 for LA">;
+    uint unkn14;
+    uint samplesCount;
+    uint unkn1C;
+    float samplingTime <comment="seconds">;
+    double triggerOffset <comment="seconds">;
+    double samplingPeriod;
+    double triggerOffset2 <comment="seconds">;
+    additionalInfo_t additionalInfo;
+    uint arraySize <comment="bytes">;
+    if(type == 1)
+    {
+        float samples[samplesCount];
+    }
+    else if (type == 6)
+    {
+        LASAMPLE samples[samplesCount];
+    }
+} dataBlock_t <size=(ReadUInt(startof(this)+148) + 152)>;
+
+char magic[4];
+dumpSize_t fullSize;
+uint totalBlocks <comment="TODO: check this value in dumps with 1/2/3/4 and LA 8/16 channels enabled">;
+dataBlock_t dataBlock[totalBlocks] <optimize=false>;
