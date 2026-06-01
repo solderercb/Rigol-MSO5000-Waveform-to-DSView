@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
-BLOCK_FILE_SIZE = 2 * 1024 * 1024
+BLOCK_FILE_SIZE = 64 * 1024 * 1024
 ADDITIONAL_INFO_SIZE = 100
 
 
@@ -289,11 +289,9 @@ def create_analog_project(project_dir, analog_blocks):
     samplerate = round(1.0 / sampling_period / 1000)*1000
     logger.debug(f"samplerate: {samplerate}")
 
-    trigger_pos = round(
-        analog_blocks[0].trigger_offset /
-        sampling_period
-    )
-
+    trigger_pos = max(0, round( analog_blocks[0].trigger_offset / sampling_period ))
+    logger.debug(f"trigger_pos: {trigger_pos}")
+    
     channel_count = len(analog_blocks)
 
     tmp = max(
@@ -312,21 +310,36 @@ def create_analog_project(project_dir, analog_blocks):
     logger.debug(f"min: {global_min}")
 
     scale = (global_max - global_min)/256
-
-    # tmp = sum(
-    #     sum(block.samples) / len(block.samples)
-    #     for block in analog_blocks) / len(analog_blocks)
-    # logger.debug(f"avg: {tmp}")
+    logger.debug(f"scale: {scale}")
 
     vOffset = 128
     logger.debug(f"vOffset: {vOffset}")
-
-    project_dir.mkdir(parents=True, exist_ok=True)
 
     total_samples_in_data = (
         samples_count * channel_count
     )
 
+    encoded_channels = []
+    stats = []
+    for block in analog_blocks:
+        data = bytearray()
+        for value in block.samples:
+            code = vOffset - round(value / scale)
+            code = max(0, min(255, code))
+            data.append(code)
+        encoded_channels.append(data)
+        mn = min(data)
+        mx = max(data)
+        mean = round(
+            sum(data) / len(data)
+        )
+        stats.append({
+            "min": mn,
+            "max": mx,
+            "mean": mean
+        })
+    # logger.debug(f"encoded_channels[0]: {encoded_channels[0]}")
+        
     total_blocks = math.ceil(
         total_samples_in_data /
         BLOCK_FILE_SIZE
@@ -337,57 +350,61 @@ def create_analog_project(project_dir, analog_blocks):
     header.append("version = 3")
     header.append("[header]")
     header.append("driver = RIGOL")
-    header.append("device mode = 2")
+    header.append("device mode = 1")
     header.append("capturefile = data")
     header.append(f"total samples = {samples_count}")
     header.append(f"total probes = {channel_count}")
     header.append(f"total blocks = {total_blocks}")
     header.append(f"samplerate = {format_with_si_prefix(samplerate)}Hz")
+    header.append("hDiv = 10000")
+    header.append("hDiv max = 10000000000")
+    header.append("hDiv min = 10")
     header.append("bits = 8")
     header.append(f"trigger pos = {trigger_pos}")
 
     for ch in range(channel_count):
+        s = stats[ch]
         header.append(f"probe{ch} = {ch}")
         header.append(f" enable{ch} = 1")
-        header.append(f" coupling{ch} = 0")
+        header.append(f" coupling{ch} = 1")
         header.append(f" vDiv{ch} = 1000")
+        header.append(f" vFactor{ch} = 1")
         header.append(f" vOffset{ch} = {vOffset}")
-        header.append(f" mapUnit{ch} = V")
-        header.append(f" mapMax{ch} = {global_max}")
-        header.append(f" mapMin{ch} = {global_min}")
-
+        header.append(f" vTrig{ch} = {vOffset}")
+        header.append(f" period{ch} = 0")
+        header.append(f" pcnt{ch} = 0")
+        header.append(f" max{ch} = {s['max']}")
+        header.append(f" min{ch} = {s['min']}")
+        header.append(f" plen{ch} = 0")
+        header.append(f" llen{ch} = 0")
+        header.append(f" level{ch} = 1")
+        header.append(f" plevel{ch} = 1")
+        header.append(f" low{ch} = {s['min']}")
+        header.append(f" high{ch} = {s['max']}")
+        header.append(f" rlen{ch} = 0")
+        header.append(f" flen{ch} = 0")
+        header.append(f" rms{ch} = 0")
+        header.append(
+            f" mean{ch} = "
+            f"{s['mean'] * 10000}"
+        )
+        
+    project_dir.mkdir( parents=True, exist_ok=True )
+    
     (project_dir / "header").write_text(
         "\n".join(header),
         encoding="utf-8"
     )
-
-    data = bytearray()
-
-    for sample_idx in range(samples_count):
-
-        for block in analog_blocks:
-
-            value = block.samples[sample_idx]
-
-            code = vOffset - round(value / scale)
-            # logger.debug(f"code: {round(value / scale)}")
-
-            code = max(0, min(255, code))
-
-            data.append(code)
-
-    # data[0] = vOffset - round(3.3 / (scale/2))
-    logger.debug(f"data[0]: {data[0]}")
-    logger.debug(f"scale: {scale}")
-
-    write_file_chunks(
-        project_dir / "A-0",
-        data
-    )
-
+    for ch, data in enumerate(
+        encoded_channels
+    ):
+        write_file_chunks(
+            project_dir / f"O-{ch}",
+            data
+        )
     session = {
         "Device": "RIGOL",
-        "DeviceMode": 2,
+        "DeviceMode": 1,
         "Language": 25,
         "Max Height": "1X",
         "Sample count": str(samples_count),
@@ -395,28 +412,35 @@ def create_analog_project(project_dir, analog_blocks):
         "Title": "DSView v1.3.0",
         "Version": 3,
         "channel": [],
-        "decoder": []
+        "decoder": [],
+        "measure": []
     }
 
+    colors = [
+        "#F6EF2F",
+        "#5ACFD8",
+        "#F1A4EC",
+        "#1E68D5",
+        "#808080"
+    ]
+    
     for ch in range(channel_count):
 
         session["channel"].append({
-            "colour": "#eeb211",
-            "coupling": 0,
+            "colour":
+                colors[ch % len(colors)],
+            "coupling": 1,
             "enabled": True,
             "index": ch,
-            "mapDefault": True,
-            "mapMax": global_max,
-            "mapMin": global_min,
-            "mapUnit": "V",
             "name": str(ch),
-            "type": 10002,
+            "trigValue": 0.5,
+            "type": 10001,
             "vdiv": 1000,
             "vfactor": 1,
             "zeroPos": 0.5
         })
 
-    with open(project_dir / "session", "w") as f:
+    with open(project_dir / "session", "w", encoding="utf-8") as f:
         json.dump(session, f, indent=4)
 
 def fix_corrupted_block(block):
