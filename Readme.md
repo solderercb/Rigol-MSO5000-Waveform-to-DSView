@@ -1,4 +1,5 @@
-### RU [[#EN]]
+### RU [EN](#EN)
+
 Осциллографы Rigol — это подарок для радиолюбителей и инженеров, поскольку не одно поколение приборов можно проапгрейдить абсолютно бесплатно. Думаю, это специальный маркетинговый ход, а не оплошность.
 В серии MSO5000 возможности апгрейда вообще колоссальные — покупаете самый дешевый прибор с двумя каналами и апгрейдите его до 4-х канального + логический анализатор и разные программные дополнения. Кто не знает как возможно увеличение каналов — даже в самом дешевом приборе все компоненты распаяны (разъемы BNC каналов 3 и 4 закрыты крышечками) и при разблокировке опции 4CH эти каналы начинают работать.
 <details>
@@ -19,10 +20,15 @@
 
 [^1]: Во время анализа файлов Rigol, созданных на моем осциллографе, я определил форматы заголовков данных. Однако, когда я посмотрел файлы, найденные в сети, я понял причину по которой мои файлы не открывались сторонними просмотровщиками. Оказалось, что в моих файлах в заголовке блока данных логического анализатора записаны неправильные параметры кол-ва семплов, размера блока и длительности выборки. В конвертере предусмотрена коррекция таких ошибок.
 
-![[img/ESPI 001 DSO screenshot.png]]![[img/ESPI 001 DSView screenshot.png]]![[img/ESPI 100 DSO screenshot.png]]![[img/ESPI 100 DSView screenshot.png]]
+![](img/ESPI 001 DSO screenshot.png)
+![](img/ESPI 001 DSView screenshot.png)
+![](img/ESPI 100 DSO screenshot.png)
+![](img/ESPI 100 DSView screenshot.png)
 
 ### EN
-%% (translated by AI) %%
+
+> translated by AI
+
 Rigol oscilloscopes are a gift for enthusiasts and engineers, since more than one generation of devices can be upgraded absolutely free of charge. I think this is a special marketing move, not an oversight.
 
 The upgrade capabilities of the MSO5000 series are truly enormous: you buy the cheapest device with two channels and upgrade it to a 4‑channel one, plus add a logic analyser and various software enhancements. For those who don’t know how channel expansion is possible: even the cheapest device has all components soldered in place (BNC connectors for channels 3 and 4 are covered with caps), and when you unlock the 4CH option, these channels start working.
